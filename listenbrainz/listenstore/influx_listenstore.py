@@ -153,11 +153,30 @@ class InfluxListenStore(ListenStore):
         """
 
         submit = []
-        user_names = {}
+        user_name_counts = {}
         for listen in listens:
+<<<<<<< e1f80edd0c65844d046545083e5bdd36d9a2feba:listenbrainz/listenstore/influx_listenstore.py
             user_names[listen.user_name] = 1
             submit.append(listen.to_influx(get_measurement_name(listen.user_name)))
+=======
+            try:
+                user_name_counts[listen.user_name] += 1
+            except KeyError:
+                user_name_counts[listen.user_name] = 1
 
+            submit.append(listen.to_influx(self.escape(listen.user_name)))
+>>>>>>> Improve influx listenstore on how it writes counts:listenstore/influx_listenstore.py
+
+        # Enter a measurement to count items inserted
+        submit.append({ 
+                'measurement' : '__listen_count',
+                'tags' : {
+                    'item_count' : len(listens)
+                },
+                'fields' : {
+                    'item_count' : len(listens)
+                }
+            })
 
         try:
             if not self.influx.write_points(submit, time_precision='s'):
@@ -169,19 +188,11 @@ class InfluxListenStore(ListenStore):
             raise
 
         # If we reach this point, we were able to write the listens to the InfluxListenStore.
-        # So update the listen counts of the users cached in redis.
-        for data in submit:
-            user_key = "{}{}".format(REDIS_INFLUX_USER_LISTEN_COUNT, data['tags']['user_name'])
-            if self.redis.exists(user_key):
-                self.redis.incr(user_key)
-
-        # Invalidate cached data for user
-        for user_name in user_names.keys():
+        # So update the listen counts of the users cached in redis and invalidate cached data for user
+        for user_name in user_name_counts.keys():
+            user_key = "{}{}".format(REDIS_INFLUX_USER_LISTEN_COUNT, user_name)
+            self.redis.incrby(user_key, user_name_counts[user_name])
             self.redis.delete(REDIS_USER_TIMESTAMPS % user_name)
-
-#        l = [ REDIS_INFLUX_USER_LISTEN_COUNT + str(id) for id in user_names])
-#        self.log.info("delete: " % ",".join(l))
-#        self.redis.delete(*[ REDIS_INFLUX_USER_LISTEN_COUNT + user_hash(user_name) for id in user_names])
 
 
     def fetch_listens_from_storage(self, user_name, from_ts, to_ts, limit, order):
