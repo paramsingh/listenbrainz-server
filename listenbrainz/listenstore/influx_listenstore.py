@@ -155,20 +155,15 @@ class InfluxListenStore(ListenStore):
         submit = []
         user_name_counts = {}
         for listen in listens:
-<<<<<<< e1f80edd0c65844d046545083e5bdd36d9a2feba:listenbrainz/listenstore/influx_listenstore.py
-            user_names[listen.user_name] = 1
-            submit.append(listen.to_influx(get_measurement_name(listen.user_name)))
-=======
             try:
                 user_name_counts[listen.user_name] += 1
             except KeyError:
                 user_name_counts[listen.user_name] = 1
 
             submit.append(listen.to_influx(self.escape(listen.user_name)))
->>>>>>> Improve influx listenstore on how it writes counts:listenstore/influx_listenstore.py
 
         # Enter a measurement to count items inserted
-        submit.append({ 
+        submit.append({
                 'measurement' : '__listen_count',
                 'tags' : {
                     'item_count' : len(listens)
