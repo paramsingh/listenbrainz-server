@@ -18,7 +18,7 @@ from requests.exceptions import ConnectionError
 from redis import Redis
 from listenbrainz.redis_keys import INCOMING_QUEUE_SIZE_KEY, UNIQUE_QUEUE_SIZE_KEY
 
-REPORT_FREQUENCY = 100
+REPORT_FREQUENCY = 1000
 DUMP_JSON_WITH_ERRORS = False
 ERROR_RETRY_DELAY = 3 # number of seconds to wait until retrying an operation
 

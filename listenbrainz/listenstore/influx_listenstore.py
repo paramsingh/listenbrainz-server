@@ -18,14 +18,13 @@ REDIS_INFLUX_USER_LISTEN_COUNT = "ls.listencount." # append username
 
 # TODO: 
 # Add a rentention policy for old data
-# Have get_count sum up the current pending ones as well
 
 
 class InfluxListenStore(ListenStore):
 
     REDIS_INFLUX_TOTAL_LISTEN_COUNT = "ls.listencount.total"
-    TOTAL_LISTEN_COUNT_CACHE_TIME = 10 * 60
-    USER_LISTEN_COUNT_CACHE_TIME = 15 * 60 # in seconds. 15 minutes
+    TOTAL_LISTEN_COUNT_CACHE_TIME = 5 * 60
+    USER_LISTEN_COUNT_CACHE_TIME = 10 * 60 # in seconds. 15 minutes
 
     def __init__(self, conf):
         ListenStore.__init__(self, conf)
@@ -125,8 +124,26 @@ class InfluxListenStore(ListenStore):
         try:
             item = result.get_points(measurement = '__listen_count').next()
             count = int(item['listen_total'])
+            dt = datetime.strptime(item['time'] , "%Y-%m-%dT%H:%M:%SZ")
+            timestamp = int(dt.strftime('%s'))
         except (KeyError, ValueError, StopIteration):
+            timestamp = 0
             count = 0
+
+        # Now sum counts that have been added in the interval we're interested in 
+        try:
+            result = self.influx.query("""SELECT sum(item_count) as total
+                                            FROM __listen_count
+                                           WHERE time > %d000000000""" % (timestamp))
+        except (InfluxDBServerError, InfluxDBClientError) as e:
+            self.log.error("Cannot query influx: %s" % str(e))
+            raise
+
+        try:
+            data = result.get_points(measurement = '__listen_count').next()
+            count += int(data['total'])
+        except StopIteration:
+            pass
 
         self.redis.setex(InfluxListenStore.REDIS_INFLUX_TOTAL_LISTEN_COUNT, count, InfluxListenStore.TOTAL_LISTEN_COUNT_CACHE_TIME)
         return count
