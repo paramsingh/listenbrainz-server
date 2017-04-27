@@ -209,11 +209,10 @@ class InfluxListenStore(ListenStore):
             item = result.get_points(measurement = '__listen_count').next()
             dt = datetime.strptime(item['time'] , "%Y-%m-%dT%H:%M:%SZ")
             start_timestamp = int(dt.strftime('%s'))
+            total = int(item['listen_total'])
         except (KeyError, ValueError, StopIteration):
             total = 0
-            start_timestamp = int(time())
-
-
+            start_timestamp = 0
 
         # Next, find the timestamp of the latest and greatest count
         try:
@@ -231,45 +230,43 @@ class InfluxListenStore(ListenStore):
             end_timestamp = int(dt.strftime('%s'))
         except KeyError:
             # This means we have no item_counts to update, so bail.
+            self.log.info("no counts!")
             return
 
-        print(start_timestamp)
-        print(end_timestamp)
         # Now sum counts that have been added in the interval we're interested in
         try:
             result = self.influx.query("""SELECT sum(item_count) as total
                                             FROM __listen_count
-                                           WHERE time > %d and time <= %s""" % (start_timestamp, end_timestamp))
+                                           WHERE time > %d000000000 and time <= %d000000000""" % (start_timestamp, end_timestamp))
         except (InfluxDBServerError, InfluxDBClientError) as e:
             self.log.error("Cannot query influx: %s" % str(e))
             raise
 
         try:
-            total += result.get_points(measurement = '__listen_count').next()['total']
+            data = result.get_points(measurement = '__listen_count').next()
+            total += int(data['total'])
         except StopIteration:
             # This means we have no item_counts to update, so bail.
             return
 
         # Finally write a new total with the timestamp of the last point
-        submit = {
+        submit = [{
                 'measurement' : '__listen_count',
                 'time' : end_timestamp,
                 'tags' : {
-                    'listen_total' : len(total)
+                    'listen_total' : total
                 },
                 'fields' : {
-                    'listen_total' : len(total)
+                    'listen_total' : total
                 }
-            }
-        print("from ts: %d to ts: %d" % (start_timestamp, end_timestamp))
-        print("submit: %s" % submit)
+            }]
 
-#        try:
-#            if not self.influx.write_points(submit, time_precision='s'):
-#                self.log.error("Cannot write data to influx. (write_points returned False)")
-#        except (InfluxDBServerError, InfluxDBClientError, ValueError) as e:
-#            self.log.error("Cannot update listen counts in influx: %s" % str(e))
-#            raise
+        try:
+            if not self.influx.write_points(submit, time_precision='s'):
+                self.log.error("Cannot write data to influx. (write_points returned False)")
+        except (InfluxDBServerError, InfluxDBClientError, ValueError) as e:
+            self.log.error("Cannot update listen counts in influx: %s" % str(e))
+            raise
 
 
     def fetch_listens_from_storage(self, user_name, from_ts, to_ts, limit, order):
