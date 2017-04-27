@@ -16,6 +16,11 @@ from listenbrainz.listenstore.utils import escape, get_measurement_name
 
 REDIS_INFLUX_USER_LISTEN_COUNT = "ls.listencount." # append username
 
+# TODO: 
+# Add a rentention policy for old data
+# Have get_count sum up the current pending ones as well
+
+
 class InfluxListenStore(ListenStore):
 
     REDIS_INFLUX_TOTAL_LISTEN_COUNT = "ls.listencount.total"
@@ -104,24 +109,23 @@ class InfluxListenStore(ListenStore):
             makes a query to the db and caches it in redis.
         """
 
-        # In order to make this work again, we need to enumerate all the users and sum each one up. :(
-        # TODO: Fix this and implement as a batch process that runs once a day
-        return 0
-
         count = self.redis.get(InfluxListenStore.REDIS_INFLUX_TOTAL_LISTEN_COUNT)
         if count:
             return int(count)
 
         try:
-            result = self.influx.query("""SELECT count(*)
-                                            FROM listen""")
+            result = self.influx.query("""SELECT listen_total 
+                                            FROM __listen_count
+                                        ORDER BY time DESC
+                                           LIMIT 1""")
         except (InfluxDBServerError, InfluxDBClientError) as e:
             self.log.error("Cannot query influx: %s" % str(e))
             raise
 
         try:
-            count = result.get_points(measurement = 'listen').next()['count_recording_msid']
-        except KeyError:
+            item = result.get_points(measurement = '__listen_count').next()
+            count = int(item['listen_total'])
+        except (KeyError, ValueError, StopIteration):
             count = 0
 
         self.redis.setex(InfluxListenStore.REDIS_INFLUX_TOTAL_LISTEN_COUNT, count, InfluxListenStore.TOTAL_LISTEN_COUNT_CACHE_TIME)
