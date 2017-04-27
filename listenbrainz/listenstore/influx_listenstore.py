@@ -9,6 +9,7 @@ from redis import Redis
 from influxdb.exceptions import InfluxDBClientError, InfluxDBServerError
 import json
 from datetime import datetime
+from time import time
 from listenbrainz.listenstore import ORDER_DESC, ORDER_ASC, ORDER_TEXT, \
     USER_CACHE_TIME, REDIS_USER_TIMESTAMPS
 from listenbrainz.listenstore.utils import escape, get_measurement_name
@@ -188,6 +189,87 @@ class InfluxListenStore(ListenStore):
             user_key = "{}{}".format(REDIS_INFLUX_USER_LISTEN_COUNT, user_name)
             self.redis.incrby(user_key, user_name_counts[user_name])
             self.redis.delete(REDIS_USER_TIMESTAMPS % user_name)
+
+    def update_listen_counts(self):
+        """ This should be called every few seconds in order to sum up all of the listen counts
+            in influx and write them to a single figure
+        """
+
+        # To update the current listen total, find when we last updated the total.
+        try:
+            result = self.influx.query("""SELECT listen_total
+                                            FROM __listen_count
+                                        ORDER BY time DESC
+                                           LIMIT 1""")
+        except (InfluxDBServerError, InfluxDBClientError) as e:
+            self.log.error("Cannot query influx: %s" % str(e))
+            raise
+
+        try:
+            item = result.get_points(measurement = '__listen_count').next()
+            dt = datetime.strptime(item['time'] , "%Y-%m-%dT%H:%M:%SZ")
+            start_timestamp = int(dt.strftime('%s'))
+        except (KeyError, ValueError, StopIteration):
+            total = 0
+            start_timestamp = int(time())
+
+
+
+        # Next, find the timestamp of the latest and greatest count
+        try:
+            result = self.influx.query("""SELECT item_count
+                                            FROM __listen_count
+                                        ORDER BY time DESC
+                                           LIMIT 1""")
+        except (InfluxDBServerError, InfluxDBClientError) as e:
+            self.log.error("Cannot query influx: %s" % str(e))
+            raise
+
+        try:
+            item = result.get_points(measurement = '__listen_count').next()
+            dt = datetime.strptime(item['time'] , "%Y-%m-%dT%H:%M:%SZ")
+            end_timestamp = int(dt.strftime('%s'))
+        except KeyError:
+            # This means we have no item_counts to update, so bail.
+            return
+
+        print(start_timestamp)
+        print(end_timestamp)
+        # Now sum counts that have been added in the interval we're interested in
+        try:
+            result = self.influx.query("""SELECT sum(item_count) as total
+                                            FROM __listen_count
+                                           WHERE time > %d and time <= %s""" % (start_timestamp, end_timestamp))
+        except (InfluxDBServerError, InfluxDBClientError) as e:
+            self.log.error("Cannot query influx: %s" % str(e))
+            raise
+
+        try:
+            total += result.get_points(measurement = '__listen_count').next()['total']
+        except StopIteration:
+            # This means we have no item_counts to update, so bail.
+            return
+
+        # Finally write a new total with the timestamp of the last point
+        submit = {
+                'measurement' : '__listen_count',
+                'time' : end_timestamp,
+                'tags' : {
+                    'listen_total' : len(total)
+                },
+                'fields' : {
+                    'listen_total' : len(total)
+                }
+            }
+        print("from ts: %d to ts: %d" % (start_timestamp, end_timestamp))
+        print("submit: %s" % submit)
+
+#        try:
+#            if not self.influx.write_points(submit, time_precision='s'):
+#                self.log.error("Cannot write data to influx. (write_points returned False)")
+#        except (InfluxDBServerError, InfluxDBClientError, ValueError) as e:
+#            self.log.error("Cannot update listen counts in influx: %s" % str(e))
+#            raise
 
 
     def fetch_listens_from_storage(self, user_name, from_ts, to_ts, limit, order):

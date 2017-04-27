@@ -18,7 +18,7 @@ from requests.exceptions import ConnectionError
 from redis import Redis
 from listenbrainz.redis_keys import INCOMING_QUEUE_SIZE_KEY, UNIQUE_QUEUE_SIZE_KEY
 
-REPORT_FREQUENCY = 5000
+REPORT_FREQUENCY = 100
 DUMP_JSON_WITH_ERRORS = False
 ERROR_RETRY_DELAY = 3 # number of seconds to wait until retrying an operation
 
@@ -52,7 +52,7 @@ class InfluxWriterSubscriber(object):
                 self.connection = pika.BlockingConnection(pika.ConnectionParameters(host=config.RABBITMQ_HOST, port=config.RABBITMQ_PORT))
                 break
             except Exception as e:
-                self.log.error("Cannot connect to rabbitmq: %s, retrying in 2 seconds")
+                self.log.error("Cannot connect to rabbitmq: %s, retrying in 2 seconds", str(e))
                 sleep(ERROR_RETRY_DELAY)
 
 
@@ -81,6 +81,9 @@ class InfluxWriterSubscriber(object):
                     (self.inserts, self.time, self.inserts / self.time, self.total_inserts))
             self.inserts = 0
             self.time = 0
+
+            # now update listen counts in influx
+            self.ls.update_listen_counts()
 
         return ret
 
