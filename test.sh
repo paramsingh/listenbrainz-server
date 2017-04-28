@@ -45,6 +45,8 @@ function setup {
     docker-compose -f $COMPOSE_FILE_LOC -p $COMPOSE_PROJECT_NAME up -d influx
     docker cp admin/influx/create_db.sql listenbrainztest_influx_1:/create_db.sql
     docker exec -d listenbrainztest_influx_1 bash -c "influx < /create_db.sql"
+    docker cp admin/influx/create_retention_policies.sql listenbrainztest_influx_1:/create_retention_policies.sql
+    docker exec -d listenbrainztest_influx_1 bash -c "influx < /create_retention_policies.sql"
 }
 
 function is_db_running {
