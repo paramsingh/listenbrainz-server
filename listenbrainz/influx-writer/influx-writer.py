@@ -3,11 +3,12 @@ from __future__ import print_function, division, absolute_import
 
 import sys
 import os
-import pika
+import logging
 from datetime import datetime
 from influxdb import InfluxDBClient
 from influxdb.exceptions import InfluxDBClientError, InfluxDBServerError
 import ujson
+import pika
 import logging
 from listenbrainz.listen import Listen
 from time import time, sleep
@@ -219,7 +220,8 @@ class InfluxWriterSubscriber(object):
         while True:
             try:
                 self.unique_ch.basic_publish(exchange='unique', routing_key='', body=ujson.dumps(unique),
-                    properties=pika.BasicProperties(delivery_mode = 2,))
+                                             properties=pika.BasicProperties(delivery_mode = 2,))
+>>>>>>> Code improvements and attempting to fix one broken test:influx-writer/influx-writer.py
                 break
             except pika.exceptions.ConnectionClosed:
                 self.connect_to_rabbitmq()
@@ -249,10 +251,10 @@ class InfluxWriterSubscriber(object):
         while True:
             try:
                 self.ls = InfluxListenStore({ 'REDIS_HOST' : config.REDIS_HOST,
-                                         'REDIS_PORT' : config.REDIS_PORT,
-                                         'INFLUX_HOST': config.INFLUX_HOST,
-                                         'INFLUX_PORT': config.INFLUX_PORT,
-                                         'INFLUX_DB_NAME': config.INFLUX_DB_NAME})
+                                              'REDIS_PORT' : config.REDIS_PORT,
+                                              'INFLUX_HOST': config.INFLUX_HOST,
+                                              'INFLUX_PORT': config.INFLUX_PORT,
+                                              'INFLUX_DB_NAME': config.INFLUX_DB_NAME})
                 self.influx = InfluxDBClient(host=config.INFLUX_HOST, port=config.INFLUX_PORT, database=config.INFLUX_DB_NAME)
                 break
             except Exception as err:
@@ -286,7 +288,6 @@ class InfluxWriterSubscriber(object):
             except pika.exceptions.ConnectionClosed:
                 self.log.info("Connection to rabbitmq closed. Re-opening.")
                 self.connection = None
-                self.channel = None
                 continue
 
             self.connection.close()
