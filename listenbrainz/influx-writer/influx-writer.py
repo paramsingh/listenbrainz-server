@@ -83,7 +83,7 @@ class InfluxWriterSubscriber(object):
         return ret
 
 
-    def insert_to_listenstore(self, data, retries=5):
+    def insert_to_listenstore(self, data):
         """
         Inserts a batch of listens to the ListenStore. If this fails, then breaks the data into
         two parts and recursively tries to insert them, until we find the culprit listen
@@ -98,19 +98,11 @@ class InfluxWriterSubscriber(object):
         if not data:
             return 0
 
-        failure_count = 0
-        while True:
-            try:
-                self.ls.insert(data)
-                return len(data)
-            except (InfluxDBServerError, InfluxDBClientError, ValueError) as e:
-                failure_count += 1
-                if failure_count >= retries:
-                    break
-                sleep(ERROR_RETRY_DELAY)
-            except ConnectionError as e:
-                self.log.error("Cannot write data to listenstore: %s. Sleep." % str(e))
-                sleep(ERROR_RETRY_DELAY)
+        try:
+            self.ls.insert(data)
+            return len(data)
+        except (InfluxDBServerError, InfluxDBClientError, ValueError, ConnectionError) as e:
+            pass
 
         # if we get here, we failed on trying to write the data
         if len(data) == 1:
@@ -128,9 +120,9 @@ class InfluxWriterSubscriber(object):
         else:
             slice_index = len(data) // 2
             # send first half
-            sent = self.insert_to_listenstore(data[:slice_index], retries)
+            sent = self.insert_to_listenstore(data[:slice_index])
             # send second half
-            sent += self.insert_to_listenstore(data[slice_index:], retries)
+            sent += self.insert_to_listenstore(data[slice_index:])
             return sent
 
 
