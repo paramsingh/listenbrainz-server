@@ -190,8 +190,18 @@ def profile(user_name):
         have_listen_count=have_listen_count,
         listen_count=format(int(listen_count), ",d"),
         artist_count=format(artist_count, ",d")
+        section="listens"
     )
 
+
+@user_bp.route("/<user_name>/info")
+def info(user_name):
+    user = db_user.get_by_mb_id(user_name)
+    return render_template(
+        "user/info.html",
+        section="info",
+        user=user
+    )
 
 @user_bp.route("/import")
 @login_required
