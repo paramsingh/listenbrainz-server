@@ -1,6 +1,9 @@
 {% extends 'user/base.html' %}
 
 {% block profile_content %}
+	<img src="{{ url_for('static', filename='img/musicbrainz-16.svg') }}" />
+    <b><a href="https://musicbrainz.org/user/{{ user.musicbrainz_id }}">See profile on MusicBrainz</a></b>
+
 	<h3> Statistics </h3>
 
 	<div class="row">
@@ -23,7 +26,6 @@
 		</table>
 	  </div>
 	</div>
-
 
     <h3>Recent listens</h3>
 
