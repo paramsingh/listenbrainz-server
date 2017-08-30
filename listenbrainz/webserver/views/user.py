@@ -201,6 +201,18 @@ def info():
         user=current_user
     )
 
+@user_bp.route("/<user_name>/artists")
+def artists(user_name):
+    """
+    """
+    user = _get_user(user_name)
+    data = db_stats.get_user_stats(user.id)['artists']['all_time']
+    return render_template(
+        "user/artists.html",
+        user=user,
+        data=ujson.dumps(data),
+    )
+
 @user_bp.route("/import")
 @login_required
 def import_data():
