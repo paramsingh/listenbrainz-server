@@ -29,6 +29,7 @@ WORKDIR /code
 # MessyBrainz
 RUN git clone --branch=db-tests https://github.com/paramsingh/messybrainz-server.git messybrainz
 WORKDIR /code/messybrainz
+RUN git rev-parse HEAD
 RUN pip3 install -r requirements.txt
 RUN python3 setup.py install
 
