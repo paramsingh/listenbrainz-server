@@ -25,15 +25,7 @@ except ImportError:
     pass
 
 
-SUBMIT_CHUNK_SIZE = 1000 # the number of listens to send to BQ in one batch
 
-# NOTE: this MUST be greater than or equal to the maximum number of listens sent to us in one
-# RabbitMQ batch, otherwise BigQueryWriter will submit a partial batch and send an ack for
-# the batch.
-assert(SUBMIT_CHUNK_SIZE >= 50)
-
-PREFETCH_COUNT = 20    # the number of RabbitMQ batches to prefetch
-FLUSH_LISTENS_TIME = 3 # the number of seconds to wait before flushing all listens in queue to BQ
 
 
 class BigQueryWriter(ListenWriter):
@@ -43,29 +35,23 @@ class BigQueryWriter(ListenWriter):
         self.channel = None
         self.DUMP_JSON_WITH_ERRORS = True
 
-        self.bq_data = []
-        self.delivery_tags = []
 
-        self.timer_id = None # keeps track of the timer added to flush listens
-
-
-
-    def submit_data(self):
-        """ Submits the data in self.bq_data to Google BigQuery and
+    def write_data(self):
+        """ Submits the data in self.data to Google BigQuery and
             acknowledges the appropriate delivery tags.
         """
 
-        if len(self.bq_data) == 0:
+        if len(self.data) == 0:
             return
 
-        assert(len(self.bq_data) > 0)
+        assert(len(self.data) > 0)
         assert(len(self.delivery_tags) > 0)
 
         t0 = time()
 
         # convert the data to BQ format and send
         body = {
-            'rows': self.bq_data,
+            'rows': self.data,
         }
         while True:
             try:
@@ -98,38 +84,19 @@ class BigQueryWriter(ListenWriter):
             sleep(self.ERROR_RETRY_DELAY)
 
         # collect and occasionally print some stats
+        # TODO: move this to listen_writer
         time_taken = time() - t0
-        self.total_inserts += len(self.bq_data)
+        self.total_inserts += len(self.data)
         self.log.info(
             'Inserted %d listens in %.1fs (%.2f listens/sec). Total %d rows.',
-            len(self.bq_data),
+            len(self.data),
             time_taken,
-            len(self.bq_data) / time_taken,
+            len(self.data) / time_taken,
             self.total_inserts
         )
 
-        # reset back to normal
-        self.bq_data = []
-        self.delivery_tags = []
 
-
-    def callback(self, ch, method, properties, body):
-
-        # if some timeout exists, remove it as we'll add a new one
-        # before this method exits
-        if self.timer_id is not None:
-            ch.connection.remove_timeout(self.timer_id)
-            self.timer_id = None
-
-        listens = ujson.loads(body)
-        count = len(listens)
-
-        # if adding this batch pushes us over the line, send this batch before
-        # adding new listens to queue
-        if len(self.bq_data) + count > SUBMIT_CHUNK_SIZE:
-            self.submit_data()
-
-        # now add current listens to the queue
+    def add_listens_to_queue(self, listens):
         for listen in listens:
             meta = listen['track_metadata']
             row = {
@@ -150,22 +117,10 @@ class BigQueryWriter(ListenWriter):
 
                 'tags' : ','.join(meta['additional_info'].get('tags', [])),
             }
-            self.bq_data.append({
+            self.data.append({
                 'json': row,
                 'insertId': '%s-%s-%s' % (listen['user_name'], listen['listened_at'], listen['recording_msid'])
             })
-
-        self.delivery_tags.append(method.delivery_tag)
-
-        # if we won't get any new messages until we ack these, submit data
-        if len(self.delivery_tags) == PREFETCH_COUNT:
-            self.submit_data()
-
-        # add a timeout that makes sure that the listens in the queue get submitted
-        # after some time
-        self.timer_id = ch.connection.add_timeout(FLUSH_LISTENS_TIME, self.submit_data)
-
-        return True
 
 
     def start(self):

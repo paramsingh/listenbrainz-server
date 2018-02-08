@@ -43,10 +43,9 @@ class InfluxWriterTestCase(IntegrationTestCase):
         # send the same listen twice
         r = self.send_listen(user, 'valid_single.json')
         self.assert200(r)
-        time.sleep(2)
         r = self.send_listen(user, 'valid_single.json')
         self.assert200(r)
-        time.sleep(2)
+        time.sleep(4)
 
         to_ts = int(time.time())
         listens = self.ls.fetch_listens(user['musicbrainz_id'], to_ts=to_ts)
@@ -59,10 +58,9 @@ class InfluxWriterTestCase(IntegrationTestCase):
         # send the same listen twice
         r = self.send_listen(user, 'valid_single.json')
         self.assert200(r)
-        time.sleep(2)
         r = self.send_listen(user, 'valid_single.json')
         self.assert200(r)
-        time.sleep(2)
+        time.sleep(4)
 
         to_ts = int(time.time())
         listens = self.ls.fetch_listens(user['musicbrainz_id'], to_ts=to_ts)
@@ -73,7 +71,7 @@ class InfluxWriterTestCase(IntegrationTestCase):
         user = db_user.get_or_create('phifedawg')
         r = self.send_listen(user, 'same_batch_duplicates.json')
         self.assert200(r)
-        time.sleep(2)
+        time.sleep(4)
 
         to_ts = int(time.time())
         listens = self.ls.fetch_listens(user['musicbrainz_id'], to_ts=to_ts)
@@ -94,7 +92,7 @@ class InfluxWriterTestCase(IntegrationTestCase):
         r = self.send_listen(user2, 'valid_single.json')
         self.assert200(r)
 
-        time.sleep(2) # sleep to allow influx-writer to do its thing
+        time.sleep(4) # sleep to allow influx-writer to do its thing
 
         to_ts = int(time.time())
         listens = self.ls.fetch_listens(user1['musicbrainz_id'], to_ts=to_ts)
@@ -122,7 +120,7 @@ class InfluxWriterTestCase(IntegrationTestCase):
 
         r = self.send_listen(user, 'same_timestamp_diff_track_valid_single_3.json')
         self.assert200(r)
-        time.sleep(2)
+        time.sleep(4)
 
         to_ts = int(time.time())
         listens = self.ls.fetch_listens(user['musicbrainz_id'], to_ts=to_ts)

@@ -30,89 +30,14 @@ class InfluxWriterSubscriber(ListenWriter):
         self.incoming_ch = None
         self.unique_ch = None
 
-
-    def callback(self, ch, method, properties, body):
-        listens = ujson.loads(body)
-        ret = self.write(listens)
-        if not ret:
-            return ret
-
-        while True:
-            try:
-                self.incoming_ch.basic_ack(delivery_tag = method.delivery_tag)
-                break
-            except pika.exceptions.ConnectionClosed:
-                self.connect_to_rabbitmq()
-
-        count = len(listens)
-
-        self._collect_and_log_stats(count, call_method=self.ls.update_listen_counts)
-
-        return ret
-
-
-    def insert_to_listenstore(self, data, retries=5):
-        """
-        Inserts a batch of listens to the ListenStore. If this fails, then breaks the data into
-        two parts and recursively tries to insert them, until we find the culprit listen
-
-        Args:
-            data: the data to be inserted into the ListenStore
-            retries: the number of retries to make before deciding that we've failed
-
-        Returns: number of listens successfully sent
-        """
-
-        if not data:
-            return 0
-
-        failure_count = 0
-        while True:
-            try:
-                self.ls.insert(data)
-                return len(data)
-            except (InfluxDBServerError, InfluxDBClientError, ValueError) as e:
-                failure_count += 1
-                if failure_count >= retries:
-                    break
-                sleep(ERROR_RETRY_DELAY)
-            except ConnectionError as e:
-                self.log.error("Cannot write data to listenstore: %s. Sleep." % str(e))
-                sleep(ERROR_RETRY_DELAY)
-
-        # if we get here, we failed on trying to write the data
-        if len(data) == 1:
-            # try to send the bad listen one more time and if it doesn't work
-            # log the error
-            try:
-                self.ls.insert(data)
-                return 1
-            except (InfluxDBServerError, InfluxDBClientError, ValueError, ConnectionError) as e:
-                self.log.error("Unable to insert bad listen to listenstore: %s" % str(e))
-                if DUMP_JSON_WITH_ERRORS:
-                    self.log.error("Was writing the following data:")
-                    influx_dict = data[0].to_influx(get_measurement_name(data[0].user_name))
-                    self.log.error(ujson.dumps(influx_dict))
-                return 0
-        else:
-            slice_index = len(data) // 2
-            # send first half
-            sent = self.insert_to_listenstore(data[:slice_index], retries)
-            # send second half
-            sent += self.insert_to_listenstore(data[slice_index:], retries)
-            return sent
-
-
-    def write(self, listen_dicts):
-        submit = []
-        unique = []
+    def add_listens_to_queue(self, listens):
         duplicate_count = 0
         unique_count = 0
 
         # Partition the listens on the basis of user names
         # and then store the time range for each user
         users = {}
-        for listen in listen_dicts:
+        for listen in listens:
 
             t = int(listen['listened_at'])
             user_name = listen['user_name']
@@ -184,19 +109,75 @@ class InfluxWriterSubscriber(ListenWriter):
 
                 if not dup:
                     unique_count += 1
-                    submit.append(Listen.from_json(listen))
-                    unique.append(listen)
+                    self.data.append(listen)
                     timestamps[t].append({
                         'time': convert_timestamp_to_influx_row_format(t),
                         'recording_msid': recording_msid
                     })
 
+        self.log.info("dups: %d, unique: %d" % (duplicate_count, unique_count))
+
+
+    def insert_to_listenstore(self, data, retries=5):
+        """
+        Inserts a batch of listens to the ListenStore. If this fails, then breaks the data into
+        two parts and recursively tries to insert them, until we find the culprit listen
+
+        Args:
+            data: the data to be inserted into the ListenStore
+            retries: the number of retries to make before deciding that we've failed
+
+        Returns: number of listens successfully sent
+        """
+
+        if not data:
+            return 0
+
+        failure_count = 0
+        while True:
+            try:
+                self.ls.insert(data)
+                return len(data)
+            except (InfluxDBServerError, InfluxDBClientError, ValueError) as e:
+                failure_count += 1
+                if failure_count >= retries:
+                    break
+                sleep(ERROR_RETRY_DELAY)
+            except ConnectionError as e:
+                self.log.error("Cannot write data to listenstore: %s. Sleep." % str(e))
+                sleep(ERROR_RETRY_DELAY)
+
+        # if we get here, we failed on trying to write the data
+        if len(data) == 1:
+            # try to send the bad listen one more time and if it doesn't work
+            # log the error
+            try:
+                self.ls.insert(data)
+                return 1
+            except (InfluxDBServerError, InfluxDBClientError, ValueError, ConnectionError) as e:
+                self.log.error("Unable to insert bad listen to listenstore: %s" % str(e))
+                if DUMP_JSON_WITH_ERRORS:
+                    self.log.error("Was writing the following data:")
+                    influx_dict = data[0].to_influx(get_measurement_name(data[0].user_name))
+                    self.log.error(ujson.dumps(influx_dict))
+                return 0
+        else:
+            slice_index = len(data) // 2
+            # send first half
+            sent = self.insert_to_listenstore(data[:slice_index], retries)
+            # send second half
+            sent += self.insert_to_listenstore(data[slice_index:], retries)
+            return sent
+
+
+    def write_data(self):
+
         t0 = time()
+        submit = [Listen.from_json(x) for x in self.data]
         submitted_count = self.insert_to_listenstore(submit)
         self.time += time() - t0
 
-        self.log.error("dups: %d, unique: %d, submitted: %d" % (duplicate_count, unique_count, submitted_count))
-        if not unique_count:
+        if not len(self.data):
             return True
 
         while True:
@@ -204,12 +185,14 @@ class InfluxWriterSubscriber(ListenWriter):
                 self.unique_ch.basic_publish(
                     exchange=self.config.UNIQUE_EXCHANGE,
                     routing_key='',
-                    body=ujson.dumps(unique),
-                    properties=pika.BasicProperties(delivery_mode = 2,),
+                    body=ujson.dumps(self.data),
+                    properties=pika.BasicProperties(delivery_mode=2,),
                 )
                 break
             except pika.exceptions.ConnectionClosed:
                 self.connect_to_rabbitmq()
+
+        self.ls.update_listen_counts()
 
         return True
 

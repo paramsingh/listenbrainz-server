@@ -156,7 +156,7 @@ class APICompatDeprecatedTestCase(APICompatIntegrationTestCase):
         self.assert200(r)
         self.assertEqual(r.data.decode('utf-8'), 'OK\n')
 
-        time.sleep(1)
+        time.sleep(4)
         to_ts = int(time.time())
         listens = self.ls.fetch_listens(self.user['musicbrainz_id'], to_ts=to_ts)
         self.assertEqual(len(listens), 1)
