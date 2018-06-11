@@ -17,7 +17,7 @@ data.
 A team of former Last.fm and current MusicBrainz hackers created the first
 version of ListenBrainz in a weekend. Since the original project was created,
 technology has advanced at an incredibly rapid pace, which made re-creating the
-original project fairly straightforward. 
+original project fairly straightforward.
 
 The project has two main goals:
 
@@ -35,7 +35,7 @@ These instructions help you get started with the development process.
 Installation in a production environment may be different.
 
 **Read the [development environment
-documentation](https://listenbrainz.readthedocs.io/en/latest/dev/devel-env.html 
+documentation](https://listenbrainz.readthedocs.io/en/latest/dev/devel-env.html
 "Setting up a development environment - ListenBrainz documentation")**
 
 
@@ -83,6 +83,6 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License along
 with this program; if not, write to the Free Software Foundation, Inc.,
-51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 ```
 
