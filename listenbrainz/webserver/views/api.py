@@ -76,6 +76,7 @@ def submit_listen():
 
 
 @api_bp.route("/user/<user_name>/listens")
+@crossdomain(headers="Authorization, Content-Type")
 @ratelimit()
 def get_listens(user_name):
     """
