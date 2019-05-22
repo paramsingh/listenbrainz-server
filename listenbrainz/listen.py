@@ -239,7 +239,7 @@ class Listen(object):
                 'release_group_mbid': self.data['additional_info'].get('release_group_mbid', ''),
                 'track_mbid': self.data['additional_info'].get('track_mbid', ''),
                 'work_mbids': ','.join(self.data['additional_info'].get('work_mbids', [])),
-                'tracknumber': self.data['additional_info'].get('tracknumber', ''),
+                'tracknumber': str(self.data['additional_info'].get('tracknumber', '')),
                 'isrc': self.data['additional_info'].get('isrc', ''),
                 'spotify_id': self.data['additional_info'].get('spotify_id', ''),
                 'inserted_timestamp': int(time.time()),
